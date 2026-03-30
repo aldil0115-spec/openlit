@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 외부 OTel Collector 가 노출하는 메트릭 (앱 traces/metrics/logs 통계)
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # Prometheus 자기 자신
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

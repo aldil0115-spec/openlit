@@ -1,0 +1,71 @@
+# 외부 OTel Collector 설정
+# 역할: 앱의 단일 진입점 → OpenLit + Elasticsearch + Prometheus 로 팬아웃
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  memory_limiter:
+    limit_mib: 512
+    spike_limit_mib: 128
+    check_interval: 5s
+
+exporters:
+  # OpenLit 내장 collector 로 OTLP 전달 (ClickHouse 저장)
+  otlp/openlit:
+    endpoint: openlit:4317
+    tls:
+      insecure: true
+
+  # Elasticsearch 로 Traces / Logs 전달
+  elasticsearch:
+    endpoints:
+      - http://elasticsearch:9200
+    traces_index: otel-traces
+    logs_index: otel-logs
+    tls:
+      insecure: true
+    retry:
+      enabled: true
+      max_requests: 3
+
+  # Prometheus 스크레이프용 메트릭 엔드포인트
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: otel
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+
+  pipelines:
+    # Traces → OpenLit(ClickHouse) + Elasticsearch
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/openlit, elasticsearch]
+
+    # Metrics → OpenLit(ClickHouse) + Prometheus 엔드포인트
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/openlit, prometheus]
+
+    # Logs → OpenLit(ClickHouse) + Elasticsearch
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/openlit, elasticsearch]
